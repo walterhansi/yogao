@@ -1,0 +1,18 @@
+{
+  "id": "/yogao/",
+  "name": "yogAO",
+  "short_name": "yogAO",
+  "description": "Yoga-Übungen nachschlagen und üben – aus sieben Yoga-Büchern",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#131419",
+  "theme_color": "#131419",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
