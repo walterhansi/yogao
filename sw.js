@@ -1,7 +1,7 @@
 /* yogAO – Service Worker: App offline (die privaten Übungsdaten liegen im Gerätespeicher, nicht hier). Seitenaufrufe: erst Netzwerk, sonst Cache. */
 'use strict';
-const CACHE_VERSION = 'yogao-v1.1.0';
-const SHELL = ['./', './index.html', './app.js', './app.css', './manifest.json', './aosync.js', './lib/qrcode.js', './lib/jsqr.js',
+const CACHE_VERSION = 'yogao-v1.2.0';
+const SHELL = ['./', './index.html', './app.js', './app.css', './manifest.json', './aogit.js',
   './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', event => {

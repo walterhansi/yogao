@@ -1,17 +1,18 @@
 /* yogAO – Yoga-Übungen nachschlagen und üben */
 'use strict';
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 let BOOKS = {}; // kommt aus der privaten Datendatei
 const GROUPS = ['Stehen','Sitzen','Knien / Vierfüßler','Rücken- und Seitlage','Bauchlage','Umkehrhaltungen und Armbalancen','Kräftigung','Faszienrolle','Mobilisation','Atemübungen','Entspannung · Meditation'];
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const main = $('#main');
+const mainData = $('#main-data');
 let DATA = [], BY = {};
 
 /* ---------- Speicher ---------- */
 const KEY = 'yogao.v1';
-let S = {favs: [], progs: [], set: {dur: 60, gap: 5, vol: 0.8, bookdur: false, shuffle: true, music: true, wake: true}};
-try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j) { S = {...S, ...j, set: {...S.set, ...(j.set || {})}}; } } catch (e) {}
+let S = {favs: [], progs: [], progsDel: {}, favsDel: {}, set: {dur: 60, gap: 5, vol: 0.8, bookdur: false, shuffle: true, music: true, wake: true}};
+try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j) { S = {...S, ...j, progsDel: j.progsDel || {}, favsDel: j.favsDel || {}, set: {...S.set, ...(j.set || {})}}; } } catch (e) {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 const uid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -94,10 +95,12 @@ function route() {
   const h = location.hash || '#/';
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', h.startsWith(b.dataset.go.slice(0, 4)) && (b.dataset.go !== '#/' || h === '#/' || h.startsWith('#/e/'))));
   const [, a, b] = h.split('/');
-  if (a === 'e') return showEx(+b);
-  if (a === 'prog') return showProgs();
-  if (a === 'p') return showProg(b);
-  if (a === 'set') return showSet();
+  if (a === 'e') { main.hidden = false; mainData.hidden = true; return showEx(+b); }
+  if (a === 'prog') { main.hidden = false; mainData.hidden = true; return showProgs(); }
+  if (a === 'p') { main.hidden = false; mainData.hidden = true; return showProg(b); }
+  if (a === 'data') { main.hidden = true; mainData.hidden = false; return showData(); }
+  if (a === 'set') { main.hidden = false; mainData.hidden = true; return showSet(); }
+  main.hidden = false; mainData.hidden = true;
   showList();
 }
 window.addEventListener('hashchange', route);
@@ -141,7 +144,7 @@ function showList() {
   };
   scrollTo(0, view.scroll); 
 }
-function toggleFav(nr) { const i = S.favs.indexOf(nr); i < 0 ? S.favs.push(nr) : S.favs.splice(i, 1); save(); }
+function toggleFav(nr) { const i = S.favs.indexOf(nr); if (i < 0) { S.favs.push(nr); delete S.favsDel[nr]; } else { S.favs.splice(i, 1); S.favsDel[nr] = Date.now(); } save(); }
 
 /* ---------- Detail ---------- */
 let detTab = 'kurz';
@@ -204,36 +207,14 @@ function showProgs() {
     <div class="row"><button class="btn pri grow" id="new">+ Neues Programm</button></div>
     <h2>Eigene</h2>${S.progs.map(row).join('') || '<p class="mut">Noch keine eigenen Programme. Lege eines an oder kopiere ein Beispiel.</p>'}
     <h2>Beispiele</h2>${examples().map(row).join('')}
-    <h2>Übertragen</h2>
-    <div class="row"><button class="btn grow" id="snd">Senden (QR)</button><button class="btn grow" id="rcv">Empfangen (QR)</button></div>
-    <p class="mut small">Überträgt deine eigenen Programme und Favoriten per QR-Code von einem Gerät auf ein anderes, ohne Internet.</p>`;
+    <p class="mut small">Abgleich zwischen deinen Geräten: Reiter „Daten“.</p>`;
   $('#new').onclick = () => { const p = {id: uid(), name: 'Mein Programm', mode: 'timer', items: [], ts: Date.now()}; S.progs.push(p); save(); location.hash = '#/p/' + p.id; };
   main.onclick = ev => {
     const r = ev.target.closest('[data-run]');
     if (r) { ev.stopPropagation(); const p = getProg(r.dataset.run); if (p.items.length) startPractice(p); else toast('Programm ist leer'); return; }
     const c = ev.target.closest('.pi'); if (c) location.hash = '#/p/' + c.dataset.id;
   };
-  $('#snd').onclick = () => {
-    if (!window.AOSync) return toast('Übertragung nicht geladen');
-    if (!S.progs.length && !S.favs.length) return toast('Nichts zu senden');
-    AOSync.send({app: 'yogao', data: {progs: S.progs, favs: S.favs}, summary: S.progs.length + ' Programme, ' + S.favs.length + ' Favoriten'});
-  };
-  $('#rcv').onclick = () => {
-    if (!window.AOSync) return toast('Übertragung nicht geladen');
-    AOSync.receive({app: 'yogao', apply: d => {
-      if (!d || !Array.isArray(d.progs)) throw new Error('Keine yogAO-Daten');
-      let n = 0;
-      d.progs.forEach(p => {
-        if (!p || !p.id || !Array.isArray(p.items)) return;
-        p.items = p.items.filter(i => BY[i.nr]);
-        const i = S.progs.findIndex(q => q.id === p.id);
-        if (i < 0) { S.progs.push(p); n++; } else if ((p.ts || 0) > (S.progs[i].ts || 0)) { S.progs[i] = p; n++; }
-      });
-      (d.favs || []).forEach(f => { if (BY[f] && !S.favs.includes(f)) S.favs.push(f); });
-      save(); route();
-      return n + ' Programme übernommen, Favoriten zusammengeführt.';
-    }});
-  };
+  // Senden/Empfangen: Reiter „Daten“ (Abgleich über GitHub)
 }
 function showProg(id) {
   const p = getProg(id); if (!p) { location.hash = '#/prog'; return; }
@@ -263,7 +244,7 @@ function showProg(id) {
       $('#nm').oninput = ev => { p.name = ev.target.value; touch(); };
       $('#md').onclick = ev => { const b = ev.target.closest('[data-m]'); if (!b) return; p.mode = b.dataset.m; p.items.forEach(i => { if (p.mode === 'timer' && !i.sec) i.sec = defDur(BY[i.nr]); }); touch(); draw(); };
       $('#add').onclick = () => pickExercise(nr => { p.items.push(mk(nr, defDur(BY[nr]))); touch(); draw(); });
-      $('#del').onclick = () => { if (confirm('Programm „' + p.name + '“ löschen?')) { S.progs = S.progs.filter(q => q.id !== p.id); save(); location.hash = '#/prog'; } };
+      $('#del').onclick = () => { if (confirm('Programm „' + p.name + '“ löschen?')) { S.progsDel[p.id] = Date.now(); S.progs = S.progs.filter(q => q.id !== p.id); save(); location.hash = '#/prog'; } };
     }
     $('#its').onchange = ev => { const s = ev.target.dataset.sec; if (s != null) { p.items[+s].sec = Math.max(5, +ev.target.value || 60); touch(); } };
     $('#its').onclick = ev => {
@@ -474,6 +455,57 @@ async function showSet() {
   };
   scrollTo(0, 0);
 }
+
+/* ---------- Daten (Abgleich über GitHub) ---------- */
+function exportSync() { return {progs: S.progs, progsDel: S.progsDel, favs: S.favs, favsDel: S.favsDel}; }
+function applySync(d) {
+  if (!d) throw new Error('Keine yogAO-Daten');
+  let np = 0, nf = 0, rp = 0;
+  // Löschmerkungen übernehmen
+  if (d.progsDel) for (const [id, ts] of Object.entries(d.progsDel)) if (Number(ts) > (S.progsDel[id] || 0)) S.progsDel[id] = Number(ts);
+  if (d.favsDel) for (const [nr, ts] of Object.entries(d.favsDel)) if (Number(ts) > (S.favsDel[nr] || 0)) S.favsDel[nr] = Number(ts);
+  // Lokale Programme entfernen, die inzwischen (auf einem anderen Gerät) gelöscht wurden
+  S.progs = S.progs.filter(p => { const t = S.progsDel[p.id]; if (t && t >= (p.ts || 0)) { rp++; return false; } return true; });
+  // Programme der Gegenseite übernehmen
+  (d.progs || []).forEach(p => {
+    if (!p || !p.id || !Array.isArray(p.items)) return;
+    const delTs = S.progsDel[p.id];
+    if (delTs && delTs >= (p.ts || 0)) return;           // hier gelöscht – kommt nicht wieder
+    if (delTs) delete S.progsDel[p.id];                    // danach woanders neu gespeichert
+    p = {...p, items: p.items.filter(i => BY[i.nr])};
+    const i = S.progs.findIndex(q => q.id === p.id);
+    if (i < 0) { S.progs.push(p); np++; } else if ((p.ts || 0) > (S.progs[i].ts || 0)) { S.progs[i] = p; np++; }
+  });
+  // Favoriten: zuerst anderswo gelöschte entfernen, dann zusammenführen
+  S.favs = S.favs.filter(nr => !S.favsDel[nr]);
+  (d.favs || []).forEach(nr => { if (BY[nr] && !S.favsDel[nr] && !S.favs.includes(nr)) { S.favs.push(nr); nf++; } });
+  save(); route();
+  const parts = [];
+  if (np) parts.push(np + (np === 1 ? ' Programm' : ' Programme') + ' übernommen');
+  if (rp) parts.push(rp + (rp === 1 ? ' Programm' : ' Programme') + ' entfernt (anderswo gelöscht)');
+  if (nf) parts.push(nf + (nf === 1 ? ' Favorit' : ' Favoriten') + ' dazugekommen');
+  return parts.join(', ') || 'Keine Änderungen – alles war schon auf dem neuesten Stand.';
+}
+function showData() {
+  $('#topcount').textContent = '';
+  AOGit.renderDataPage(mainData, {
+    heading: 'Daten', version: VERSION,
+    intro: 'Hier tauschst du deine eigenen Programme und Favoriten zwischen deinen Geräten aus.'
+  });
+}
+AOGit.setup({
+  app: 'yogao', title: 'yogAO',
+  getData: exportSync,
+  apply: applySync,
+  isBusy: () => !!P,
+  onNews: on => {
+    const b = document.querySelector('#nav button[data-go="#/data"]');
+    if (!b) return;
+    let dot = b.querySelector('.dot');
+    if (on && !dot) { dot = document.createElement('i'); dot.className = 'dot'; b.appendChild(dot); }
+    if (!on && dot) dot.remove();
+  }
+});
 
 /* ---------- Start ---------- */
 (async () => {
